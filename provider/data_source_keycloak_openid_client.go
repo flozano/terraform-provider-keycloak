@@ -276,7 +276,8 @@ func dataSourceKeycloakOpenidClientRead(ctx context.Context, data *schema.Resour
 	clientId := data.Get("client_id").(string)
 
 	getClient := keycloakClient.GetOpenidClientByClientId
-	if clientId == "realm-management" || realmId == "master" && strings.HasSuffix(clientId, "-realm") {
+	if clientId == "realm-management" || realmId == "master" && strings.HasSuffix(clientId, "-realm") ||
+		isAdminPermissionsClient(ctx, keycloakClient, realmId, clientId) {
 		getClient = keycloakClient.GetOpenidClientByClientIdSkipSecret
 	}
 	client, err := getClient(ctx, realmId, clientId)
@@ -292,4 +293,16 @@ func dataSourceKeycloakOpenidClientRead(ctx context.Context, data *schema.Resour
 	data.Set("extra_config", client.Attributes.ExtraConfig)
 
 	return nil
+}
+
+// isAdminPermissionsClient reports whether clientId is the internal "admin-permissions" client that
+// Keycloak creates for a realm with fine-grained admin permissions v2. Since Keycloak 26.8.2 nobody
+// may manage that client, so reading its secret answers 403. Its id is the resource_server_id of
+// every FGAP v2 policy, so the data source reads it without the secret.
+func isAdminPermissionsClient(ctx context.Context, keycloakClient *keycloak.KeycloakClient, realmId, clientId string) bool {
+	if clientId != "admin-permissions" {
+		return false
+	}
+	_, err := keycloakClient.GetAdminPermissionsClientId(ctx, realmId)
+	return err == nil
 }

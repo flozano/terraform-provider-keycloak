@@ -6,6 +6,8 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/acctest"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/terraform"
+	"github.com/keycloak/terraform-provider-keycloak/keycloak"
 )
 
 func TestAccKeycloakDataSourceOpenidClient_basic(t *testing.T) {
@@ -41,6 +43,47 @@ func TestAccKeycloakDataSourceOpenidClient_basic(t *testing.T) {
 			},
 		},
 	})
+}
+
+func TestAccKeycloakDataSourceOpenidClient_adminPermissions(t *testing.T) {
+	skipIfVersionIsLessThan(testCtx, t, keycloakClient, keycloak.Version_26_2)
+	skipIfFGAPv2NotEnabled(testCtx, t, keycloakClient)
+
+	dataSourceName := "data.keycloak_openid_client.admin_permissions"
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV5ProviderFactories: testAccProtoV5ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccKeycloakOpenidClientConfig_adminPermissions(),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					testAccCheckKeycloakDataSourceOpenidClientIsAdminPermissionsClient(dataSourceName),
+					resource.TestCheckResourceAttr(dataSourceName, "client_id", "admin-permissions"),
+					resource.TestCheckResourceAttr(dataSourceName, "client_secret", ""),
+				),
+			},
+		},
+	})
+}
+
+func testAccCheckKeycloakDataSourceOpenidClientIsAdminPermissionsClient(dataSourceName string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		rs, ok := s.RootModule().Resources[dataSourceName]
+		if !ok {
+			return fmt.Errorf("data source not found: %s", dataSourceName)
+		}
+
+		adminPermissionsClientId, err := keycloakClient.GetAdminPermissionsClientId(testCtx, rs.Primary.Attributes["realm_id"])
+		if err != nil {
+			return fmt.Errorf("error getting admin-permissions client id: %s", err)
+		}
+		if rs.Primary.ID != adminPermissionsClientId {
+			return fmt.Errorf("data source id %s was not equal to %s (the id of the admin-permissions client)", rs.Primary.ID, adminPermissionsClientId)
+		}
+
+		return nil
+	}
 }
 
 func TestAccKeycloakDataSourceOpenidClient_extraConfig(t *testing.T) {
@@ -130,4 +173,17 @@ data "keycloak_openid_client" "test_extra_config" {
 	]
 }
 `, testAccRealm.Realm, clientId, clientId)
+}
+
+func testAccKeycloakOpenidClientConfig_adminPermissions() string {
+	return fmt.Sprintf(`
+data "keycloak_realm" "realm" {
+	realm = "%s"
+}
+
+data "keycloak_openid_client" "admin_permissions" {
+	realm_id  = data.keycloak_realm.realm.id
+	client_id = "admin-permissions"
+}
+`, testAccRealmFGAPv2.Realm)
 }

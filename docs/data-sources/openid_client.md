@@ -30,3 +30,8 @@ data "keycloak_role" "admin" {
 ## Attributes Reference
 
 See the docs for the `keycloak_openid_client` resource for details on the exported attributes.
+
+`client_secret` is empty for the clients whose secret Keycloak does not let anyone read: `realm-management`,
+the master realm's `<realm>-realm` clients, and the `admin-permissions` client of a realm with fine-grained
+admin permissions v2 (`admin_permissions_enabled = true`). The `id` of `admin-permissions` is the
+`resource_server_id` of that realm's FGAP v2 policies.
